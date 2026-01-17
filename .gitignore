@@ -1,0 +1,130 @@
+# ============================================================
+# Multi-Agent SRE Platform - Git Ignore
+# ============================================================
+
+# ============== Python ==============
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# ============== Virtual Environments ==============
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.conda/
+
+# ============== IDE ==============
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+*.sublime-workspace
+*.sublime-project
+
+# ============== Testing ==============
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.hypothesis/
+coverage.xml
+*.cover
+*.py,cover
+
+# ============== Type Checking ==============
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# ============== Jupyter ==============
+.ipynb_checkpoints
+*.ipynb
+
+# ============== Data & Models ==============
+data/chroma_db/
+data/chroma_runbooks/
+data/mem0/
+*.db
+*.sqlite
+*.sqlite3
+
+# Model files (large)
+*.gguf
+*.bin
+*.safetensors
+models/
+
+# ============== Logs ==============
+logs/
+*.log
+*.log.*
+
+# ============== OS ==============
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ============== Secrets ==============
+.env
+.env.local
+.env.*.local
+secrets/
+*.pem
+*.key
+
+# ============== Docker ==============
+docker-compose.override.yml
+
+# ============== Kubernetes ==============
+kubeconfig
+*.kubeconfig
+
+# ============== Project Specific ==============
+# Evaluation results (can be regenerated)
+evals/results/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Cache
+.cache/
+*.cache
+
+# Redis dump
+dump.rdb
+
+# LangSmith local cache
+.langsmith/

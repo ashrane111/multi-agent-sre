@@ -1,0 +1,175 @@
+# Immutable Security Rules for AI Agent Actions
+# These rules CANNOT be overridden by AI agents
+# Violations result in immediate action blocking
+
+rules:
+  # ==================== CRITICAL - BLOCK ====================
+  
+  - id: PROD-001
+    name: No Production Namespace Deletion
+    description: Prevents deletion of production namespaces
+    pattern: "kubectl delete namespace.*(prod|production|prd)"
+    severity: CRITICAL
+    action: BLOCK
+    message: "Cannot delete production namespaces. This action is permanently blocked."
+
+  - id: PROD-002
+    name: No Secrets in Commands
+    description: Prevents secrets from appearing in command arguments
+    pattern: "(password|secret|api_key|token|credential)=\\S+"
+    severity: CRITICAL
+    action: BLOCK
+    message: "Secrets must not appear in command arguments. Use environment variables or secrets."
+
+  - id: PROD-003
+    name: No Force Delete PVCs
+    description: Prevents force deletion of persistent volume claims
+    pattern: "kubectl delete pvc.*--force"
+    severity: CRITICAL
+    action: BLOCK
+    message: "Force deleting PVCs can cause data loss. Manual intervention required."
+
+  - id: PROD-004
+    name: No Delete All Pods
+    description: Prevents deletion of all pods in a namespace
+    pattern: "kubectl delete pods? --all"
+    severity: CRITICAL
+    action: BLOCK
+    message: "Cannot delete all pods at once. Delete specific pods only."
+
+  - id: PROD-005
+    name: No Wildcard Resource Deletion
+    description: Prevents wildcard deletion patterns
+    pattern: "kubectl delete.*(\\*|--all)"
+    severity: CRITICAL
+    action: BLOCK
+    message: "Wildcard deletions are not allowed. Be specific about resources."
+
+  - id: SEC-001
+    name: No Privileged Containers
+    description: Prevents creating privileged containers
+    pattern: "privileged:\\s*true|--privileged"
+    severity: CRITICAL
+    action: BLOCK
+    message: "Privileged containers are a security risk. Not allowed in production."
+
+  - id: SEC-002
+    name: No Host Network
+    description: Prevents using host network mode
+    pattern: "hostNetwork:\\s*true|--network=host"
+    severity: CRITICAL
+    action: BLOCK
+    message: "Host network mode is a security risk. Not allowed."
+
+  # ==================== HIGH - REVIEW ====================
+
+  - id: SCALE-001
+    name: Max Replica Limit
+    description: Limits maximum replicas to prevent runaway scaling
+    pattern: "--replicas=(\\d+)"
+    max_value: 50
+    severity: HIGH
+    action: REVIEW
+    message: "Scaling beyond 50 replicas requires human approval."
+
+  - id: RESTART-001
+    name: Production Pod Restart
+    description: Requires review for production pod restarts
+    pattern: "kubectl delete pod.*-n.*(prod|production|prd)"
+    severity: HIGH
+    action: REVIEW
+    message: "Production pod restarts require human approval."
+
+  - id: DEPLOY-001
+    name: Production Deployment Changes
+    description: Requires review for production deployment changes
+    pattern: "kubectl (set|patch|apply).*-n.*(prod|production|prd)"
+    severity: HIGH
+    action: REVIEW
+    message: "Production deployment changes require human approval."
+
+  - id: RESOURCE-001
+    name: Large Resource Changes
+    description: Requires review for significant resource changes
+    pattern: "(cpu|memory)=(\\d+)(Gi|G|Mi|M)"
+    severity: HIGH
+    action: REVIEW
+    message: "Large resource changes require human approval."
+
+  - id: ROLLBACK-001
+    name: Production Rollback
+    description: Requires review for production rollbacks
+    pattern: "kubectl rollout undo.*-n.*(prod|production|prd)"
+    severity: HIGH
+    action: REVIEW
+    message: "Production rollbacks require human approval."
+
+  # ==================== MEDIUM - LOG ====================
+
+  - id: LOG-001
+    name: Namespace Creation
+    description: Logs new namespace creation
+    pattern: "kubectl create namespace"
+    severity: MEDIUM
+    action: LOG
+    message: "New namespace creation logged for audit."
+
+  - id: LOG-002
+    name: ConfigMap Changes
+    description: Logs ConfigMap modifications
+    pattern: "kubectl (create|apply|edit) configmap"
+    severity: MEDIUM
+    action: LOG
+    message: "ConfigMap change logged for audit."
+
+  - id: LOG-003
+    name: Service Changes
+    description: Logs Service modifications
+    pattern: "kubectl (create|apply|delete) service"
+    severity: MEDIUM
+    action: LOG
+    message: "Service change logged for audit."
+
+# Blast Radius Configuration
+blast_radius:
+  # Maximum percentage of pods that can be affected by a single action
+  max_pod_impact_percentage: 25
+  
+  # Maximum number of pods that can be affected at once
+  max_pods_affected: 10
+  
+  # Namespaces that require extra scrutiny
+  sensitive_namespaces:
+    - production
+    - prod
+    - prd
+    - kube-system
+    - monitoring
+    
+  # Time windows when changes are restricted
+  change_freeze_windows:
+    - name: "Weekend Freeze"
+      days: ["Saturday", "Sunday"]
+      require_approval: true
+    - name: "Night Freeze"
+      hours: ["22:00-06:00"]
+      require_approval: true
+
+# Audit Configuration
+audit:
+  # All actions are logged
+  log_all_actions: true
+  
+  # Retain audit logs for 90 days
+  retention_days: 90
+  
+  # Include these fields in audit logs
+  required_fields:
+    - timestamp
+    - incident_id
+    - agent_name
+    - action
+    - target_resource
+    - decision
+    - approver (if applicable)
+    - reasoning

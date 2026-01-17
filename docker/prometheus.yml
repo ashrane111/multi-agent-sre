@@ -1,0 +1,22 @@
+# Prometheus configuration for Multi-Agent SRE Platform
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Multi-Agent SRE Platform API
+  - job_name: 'sre-platform'
+    static_configs:
+      - targets: ['host.docker.internal:8000']
+    metrics_path: '/metrics'
+
+  # Redis metrics (via redis_exporter if needed)
+  # - job_name: 'redis'
+  #   static_configs:
+  #     - targets: ['redis:6379']
