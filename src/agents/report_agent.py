@@ -164,7 +164,7 @@ For the Slack message, use emoji like:
 
 ## DIAGNOSIS
 - **Root Cause:** {state.root_cause}
-- **Confidence:** {state.confidence:.0%}
+- **Confidence:** {f"{state.confidence:.0%}" if state.confidence else "N/A"}
 - **Diagnosis:** {state.diagnosis}
 
 ## ANOMALIES DETECTED

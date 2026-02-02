@@ -3,7 +3,8 @@ Configuration management for Multi-Agent SRE Platform.
 
 Uses Pydantic Settings for type-safe configuration with environment variable support.
 """
-
+from dotenv import load_dotenv
+load_dotenv()  
 from functools import lru_cache
 from typing import Literal
 
@@ -25,7 +26,7 @@ class LLMSettings(BaseSettings):
 
     # Default models for each agent
     orchestrator_model: str = Field(
-        default="groq/llama-3.1-70b-versatile", alias="ORCHESTRATOR_MODEL"
+        default="groq/llama-3.3-70b-versatile", alias="ORCHESTRATOR_MODEL"
     )
     monitor_model: str = Field(default="ollama/llama3.1:8b", alias="MONITOR_MODEL")
     diagnose_model: str = Field(default="ollama/mistral:7b", alias="DIAGNOSE_MODEL")
@@ -74,7 +75,7 @@ class ReliabilitySettings(BaseSettings):
     )
 
     # Timeouts (seconds)
-    llm_timeout: int = Field(default=30, alias="LLM_TIMEOUT")
+    llm_timeout: int = Field(default=120, alias="LLM_TIMEOUT")
     agent_workflow_timeout: int = Field(default=300, alias="AGENT_WORKFLOW_TIMEOUT")
 
     # Retries

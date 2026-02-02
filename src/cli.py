@@ -103,7 +103,7 @@ def check_llm(
                     from langchain_google_genai import ChatGoogleGenerativeAI
 
                     llm = ChatGoogleGenerativeAI(
-                        model="gemini-1.5-flash",
+                        model="gemini-flash-latest",
                         google_api_key=settings.llm.google_api_key.get_secret_value(),
                     )
                     result = await llm.ainvoke("Say 'connected' in one word.")
