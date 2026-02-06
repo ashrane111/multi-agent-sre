@@ -17,6 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from src import __version__
+from src.api.routes import approvals_router, audit_router
 from src.config import settings
 from src.logging_config import set_correlation_id, setup_logging
 from src.reliability.circuit_breaker import get_all_circuit_breakers
@@ -67,6 +68,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Register API routers
+app.include_router(approvals_router)
+app.include_router(audit_router)
 
 
 @app.middleware("http")
@@ -149,12 +154,6 @@ async def create_incident() -> dict:
 async def get_incident(incident_id: str) -> dict:
     """Get incident details."""
     return {"incident_id": incident_id, "message": "To be implemented in Phase 2"}
-
-
-@app.get("/api/v1/approvals/pending", tags=["Approvals"])
-async def list_pending_approvals() -> dict:
-    """List pending HITL approvals."""
-    return {"approvals": [], "message": "To be implemented in Phase 4"}
 
 
 @app.get("/api/v1/costs", tags=["Observability"])

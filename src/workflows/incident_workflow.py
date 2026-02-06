@@ -12,6 +12,7 @@ Features:
 """
 
 import asyncio
+import os
 from datetime import datetime
 from typing import Any, Literal
 from uuid import uuid4
@@ -25,6 +26,9 @@ from src.agents.monitor_agent import MonitorAgent
 from src.agents.policy_agent import PolicyAgent
 from src.agents.remediate_agent import RemediateAgent
 from src.agents.report_agent import ReportAgent
+from src.governance.audit_trail import AuditAction, get_audit_trail
+from src.hitl.approval_manager import ApprovalStatus, get_approval_manager
+from src.hitl.slack_notifier import get_slack_notifier
 from src.logging_config import set_correlation_id, set_incident_id
 from src.workflows.states import (
     IncidentSeverity,
@@ -103,12 +107,10 @@ async def human_approval_node(state: WorkflowState) -> WorkflowState:
     """
     Human-in-the-loop approval node.
     
-    In production, this would:
-    1. Create an approval request in the queue
-    2. Send notification to Slack/PagerDuty
-    3. Wait for response (with timeout)
-    
-    For now, auto-approves P3/P4 and simulates approval for P1/P2.
+    Creates an approval request and either:
+    - Auto-approves for P3/P4 severity (configurable)
+    - Waits for human approval via API for P1/P2
+    - Falls back to simulated approval in demo mode
     
     Args:
         state: Current workflow state
@@ -117,6 +119,13 @@ async def human_approval_node(state: WorkflowState) -> WorkflowState:
         Updated state with approval status
     """
     incident_state = IncidentState.model_validate(state)
+    approval_manager = get_approval_manager()
+    audit_trail = get_audit_trail()
+    slack_notifier = get_slack_notifier()
+    
+    # Register Slack notifier for approval notifications
+    if slack_notifier not in approval_manager._notification_handlers:
+        approval_manager.register_notification_handler(slack_notifier.send_approval_request)
     
     logger.info(
         "human_approval_requested",
@@ -126,28 +135,155 @@ async def human_approval_node(state: WorkflowState) -> WorkflowState:
     )
 
     incident_state.approval_requested_at = datetime.utcnow()
-
-    # For demo/testing: Auto-approve P3/P4, simulate quick approval for P1/P2
-    # In production, this would wait for actual human response
     
-    if incident_state.severity in [IncidentSeverity.P3.value, IncidentSeverity.P4.value]:
-        # Auto-approve low severity
+    # Prepare actions for approval request
+    actions = [
+        {
+            "action_id": a.action_id,
+            "action_type": a.action_type,
+            "command": a.command,
+            "target_resource": a.target_resource,
+            "description": a.description,
+            "risk_level": a.risk_level,
+        }
+        for a in incident_state.proposed_actions
+    ]
+    
+    policy_violations = [
+        {
+            "rule_id": v.rule_id,
+            "rule_name": v.rule_name,
+            "severity": v.severity,
+            "message": v.message,
+        }
+        for v in incident_state.policy_violations
+    ]
+    
+    # Create approval request
+    approval_request = await approval_manager.create_request(
+        incident_id=incident_state.incident_id,
+        actions=actions,
+        severity=incident_state.severity.value if hasattr(incident_state.severity, 'value') else incident_state.severity,
+        policy_violations=policy_violations,
+        blast_radius_score=incident_state.blast_radius_score or 0.0,
+        root_cause=incident_state.root_cause or "",
+        diagnosis_confidence=incident_state.confidence or 0.0,
+    )
+    
+    # Log to audit trail
+    audit_trail.log(
+        action=AuditAction.APPROVAL_REQUESTED,
+        description=f"Approval requested for {len(actions)} actions",
+        incident_id=incident_state.incident_id,
+        request_id=approval_request.request_id,
+        agent="workflow",
+        details={
+            "action_count": len(actions),
+            "violation_count": len(policy_violations),
+            "blast_radius": incident_state.blast_radius_score,
+        },
+        risk_level="medium" if incident_state.severity in ["P1", "P2", IncidentSeverity.P1.value, IncidentSeverity.P2.value] else "low",
+    )
+
+    # Determine approval mode
+    interactive_mode = os.environ.get("SRE_INTERACTIVE_MODE", "false").lower() == "true"
+    auto_approve_low_severity = os.environ.get("SRE_AUTO_APPROVE_LOW", "true").lower() == "true"
+    
+    severity_value = incident_state.severity.value if hasattr(incident_state.severity, 'value') else incident_state.severity
+    is_low_severity = severity_value in [IncidentSeverity.P3.value, IncidentSeverity.P4.value, "P3", "P4"]
+    
+    if auto_approve_low_severity and is_low_severity:
+        # Auto-approve low severity incidents
+        await approval_manager.approve(
+            request_id=approval_request.request_id,
+            approver="auto-approval-system",
+            notes="Automatically approved due to low severity",
+        )
         incident_state.human_approved = True
         incident_state.human_approver = "auto-approval-low-severity"
         incident_state.approval_notes = "Automatically approved due to low severity"
+        
+        audit_trail.log(
+            action=AuditAction.APPROVAL_GRANTED,
+            description="Auto-approved due to low severity",
+            incident_id=incident_state.incident_id,
+            request_id=approval_request.request_id,
+            actor_type="system",
+            actor_id="auto-approval-system",
+        )
+        
         logger.info(
             "auto_approved",
             incident_id=incident_state.incident_id,
             reason="low_severity",
         )
+        
+    elif interactive_mode:
+        # Wait for human approval via API
+        logger.info(
+            "waiting_for_human_approval",
+            incident_id=incident_state.incident_id,
+            request_id=approval_request.request_id,
+            timeout_minutes=15,
+        )
+        
+        try:
+            # Wait for approval (15 minute timeout)
+            resolved_request = await approval_manager.wait_for_approval(
+                request_id=approval_request.request_id,
+                timeout_seconds=900,  # 15 minutes
+            )
+            
+            if resolved_request.status == ApprovalStatus.APPROVED:
+                incident_state.human_approved = True
+                incident_state.human_approver = resolved_request.resolved_by
+                incident_state.approval_notes = resolved_request.resolution_notes
+            else:
+                incident_state.human_approved = False
+                incident_state.human_approver = resolved_request.resolved_by
+                incident_state.approval_notes = f"Rejected: {resolved_request.resolution_notes}"
+                
+        except asyncio.TimeoutError:
+            # Approval timed out
+            incident_state.human_approved = False
+            incident_state.approval_notes = "Approval request timed out"
+            
+            audit_trail.log(
+                action=AuditAction.APPROVAL_EXPIRED,
+                description="Approval request timed out after 15 minutes",
+                incident_id=incident_state.incident_id,
+                request_id=approval_request.request_id,
+                risk_level="high",
+            )
+            
+            logger.warning(
+                "approval_timeout",
+                incident_id=incident_state.incident_id,
+                request_id=approval_request.request_id,
+            )
     else:
-        # Simulate human approval for high severity (in production, would wait)
-        # For demo, we'll approve after a short delay
-        await asyncio.sleep(1)  # Simulate approval time
+        # Demo mode: Simulate human approval after brief delay
+        await asyncio.sleep(1)
+        
+        await approval_manager.approve(
+            request_id=approval_request.request_id,
+            approver="sre-oncall@example.com",
+            notes="Approved after reviewing blast radius and actions",
+        )
         
         incident_state.human_approved = True
         incident_state.human_approver = "sre-oncall@example.com"
         incident_state.approval_notes = "Approved after reviewing blast radius and actions"
+        
+        audit_trail.log(
+            action=AuditAction.APPROVAL_GRANTED,
+            description="Simulated approval in demo mode",
+            incident_id=incident_state.incident_id,
+            request_id=approval_request.request_id,
+            actor_type="human",
+            actor_id="sre-oncall@example.com",
+        )
+        
         logger.info(
             "human_approved",
             incident_id=incident_state.incident_id,
@@ -155,7 +291,7 @@ async def human_approval_node(state: WorkflowState) -> WorkflowState:
         )
 
     incident_state.approval_received_at = datetime.utcnow()
-    incident_state.status = IncidentStatus.REMEDIATING
+    incident_state.status = IncidentStatus.REMEDIATING if incident_state.human_approved else IncidentStatus.CANCELLED
 
     return incident_state.model_dump(mode="json")
 

@@ -249,10 +249,14 @@ class RemediateAgent(BaseAgent):
         """
         # Simulate different outcomes based on action type
         import asyncio
+        import os
         import random
 
         # Simulate some execution time
         await asyncio.sleep(0.5)
+        
+        # Check if we should disable simulated failures (for clean demos)
+        disable_failures = os.environ.get("SRE_DISABLE_SIMULATED_FAILURES", "false").lower() == "true"
 
         # For demo purposes, most actions succeed
         # In production, this would actually execute kubectl commands
@@ -282,8 +286,8 @@ class RemediateAgent(BaseAgent):
             }
 
         else:
-            # Custom action - simulate with 90% success rate
-            if random.random() > 0.1:
+            # Custom action - simulate with 90% success rate (unless disabled)
+            if disable_failures or random.random() > 0.1:
                 return {
                     "success": True,
                     "output": f"Command executed successfully on {action.target_resource}",

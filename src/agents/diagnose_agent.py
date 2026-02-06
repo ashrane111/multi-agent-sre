@@ -137,9 +137,7 @@ class DiagnoseAgent(BaseAgent):
         state: IncidentState,
     ) -> list[SimilarIncident]:
         """
-        Recall similar incidents from episodic memory.
-        
-        TODO: Replace with actual Mem0 integration in Phase 3.
+        Recall similar incidents from episodic memory using Mem0.
         
         Args:
             state: Current incident state
@@ -147,21 +145,58 @@ class DiagnoseAgent(BaseAgent):
         Returns:
             List of similar past incidents
         """
-        # Mock similar incidents - will be replaced with Mem0 integration
-        # This simulates what we'd get from episodic memory
-        
         self._logger.debug(
             "querying_episodic_memory",
             cluster=state.cluster,
             anomalies=state.anomalies,
         )
 
-        # For now, return mock data based on anomaly types
+        try:
+            # Use real Mem0-based incident memory
+            from src.memory import get_incident_memory
+            
+            incident_memory = get_incident_memory()
+            similar_incidents = incident_memory.recall_similar_incidents(
+                state=state,
+                top_k=5,
+                threshold=0.3,
+            )
+
+            self._logger.debug(
+                "memory_recall_complete",
+                incident_count=len(similar_incidents),
+                source="mem0",
+            )
+
+            return similar_incidents
+
+        except Exception as e:
+            self._logger.warning(
+                "memory_recall_failed_using_fallback",
+                error=str(e),
+            )
+            
+            # Fallback to mock data if memory system fails
+            return self._get_fallback_similar_incidents(state)
+
+    def _get_fallback_similar_incidents(
+        self,
+        state: IncidentState,
+    ) -> list[SimilarIncident]:
+        """
+        Fallback mock similar incidents when memory system is unavailable.
+        
+        Args:
+            state: Current incident state
+            
+        Returns:
+            List of mock similar incidents
+        """
+        from datetime import datetime, timedelta
+        
         mock_incidents = []
         
         if any("cpu" in a.lower() for a in state.anomalies):
-            from datetime import datetime, timedelta
-            
             mock_incidents.append(
                 SimilarIncident(
                     incident_id="INC-2024-1234",
@@ -176,8 +211,6 @@ class DiagnoseAgent(BaseAgent):
             )
 
         if any("restart" in a.lower() or "crashloop" in a.lower() for a in state.anomalies):
-            from datetime import datetime, timedelta
-            
             mock_incidents.append(
                 SimilarIncident(
                     incident_id="INC-2024-1189",
@@ -191,18 +224,11 @@ class DiagnoseAgent(BaseAgent):
                 )
             )
 
-        self._logger.debug(
-            "memory_recall_complete",
-            incident_count=len(mock_incidents),
-        )
-
         return mock_incidents
 
     async def _query_runbooks(self, state: IncidentState) -> list[RunbookMatch]:
         """
-        Query runbook documentation using RAG.
-        
-        TODO: Replace with actual RAG pipeline in Phase 3.
+        Query runbook documentation using RAG pipeline.
         
         Args:
             state: Current incident state
@@ -215,7 +241,92 @@ class DiagnoseAgent(BaseAgent):
             anomalies=state.anomalies,
         )
 
-        # Mock runbook matches - will be replaced with actual RAG
+        try:
+            # Use real RAG pipeline
+            from src.rag import get_rag_pipeline
+            
+            rag_pipeline = get_rag_pipeline()
+            
+            # Build query from incident context
+            query = self._build_rag_query(state)
+            
+            # Retrieve relevant documents
+            retrieval_result = rag_pipeline.retrieve(
+                query=query,
+                top_k=5,
+                rerank=True,
+                rerank_top_k=3,
+            )
+
+            # Convert to RunbookMatch objects
+            matches = []
+            for doc in retrieval_result.documents:
+                metadata = doc.get("metadata", {})
+                matches.append(
+                    RunbookMatch(
+                        runbook_name=metadata.get("source", "unknown"),
+                        section=metadata.get("section", ""),
+                        content=doc.get("content", ""),
+                        relevance_score=doc.get("rerank_score", doc.get("fused_score", 0.0)),
+                    )
+                )
+
+            self._logger.debug(
+                "runbook_query_complete",
+                match_count=len(matches),
+                source="rag_pipeline",
+            )
+
+            return matches
+
+        except Exception as e:
+            self._logger.warning(
+                "rag_query_failed_using_fallback",
+                error=str(e),
+            )
+            
+            # Fallback to mock data if RAG fails
+            return self._get_fallback_runbook_matches(state)
+
+    def _build_rag_query(self, state: IncidentState) -> str:
+        """
+        Build a RAG query from incident state.
+        
+        Args:
+            state: Current incident state
+            
+        Returns:
+            Query string for RAG retrieval
+        """
+        parts = []
+        
+        # Include anomalies as primary search terms
+        if state.anomalies:
+            parts.append(" ".join(state.anomalies))
+        
+        # Include description if available
+        if state.description:
+            parts.append(state.description)
+        
+        # Include title
+        if state.title:
+            parts.append(state.title)
+        
+        return " ".join(parts)
+
+    def _get_fallback_runbook_matches(
+        self,
+        state: IncidentState,
+    ) -> list[RunbookMatch]:
+        """
+        Fallback mock runbook matches when RAG is unavailable.
+        
+        Args:
+            state: Current incident state
+            
+        Returns:
+            List of mock runbook matches
+        """
         mock_matches = []
 
         if any("cpu" in a.lower() for a in state.anomalies):
@@ -269,11 +380,6 @@ kubectl rollout undo deployment/<deployment-name> -n <namespace>
                     relevance_score=0.89,
                 )
             )
-
-        self._logger.debug(
-            "runbook_query_complete",
-            match_count=len(mock_matches),
-        )
 
         return mock_matches
 

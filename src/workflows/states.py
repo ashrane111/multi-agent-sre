@@ -32,6 +32,7 @@ class IncidentStatus(str, Enum):
     RESOLVED = "resolved"
     FAILED = "failed"
     ESCALATED = "escalated"
+    CANCELLED = "cancelled"
 
 
 class PolicyDecision(str, Enum):
