@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/ashrane111-multi-agent-sre-badge.png)](https://mseep.ai/app/ashrane111-multi-agent-sre)
+
 # 🤖 Multi-Agent SRE Platform
 
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
